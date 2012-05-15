@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response xmlns:lp1="DAV:" xmlns:lp2="http://apache.org/dav/props/">
+    <D:href>/davstuff/</D:href>
+    <D:propstat>
+      <D:prop>
+        <lp1:resourcetype>
+          <D:collection/>
+        </lp1:resourcetype>
+        <lp1:creationdate>2012-04-25T12:46:31Z</lp1:creationdate>
+        <lp1:getlastmodified>Wed, 25 Apr 2012 12:46:31 GMT</lp1:getlastmodified>
+        <lp1:getetag>"31227c-1000-4be8042c0f915"</lp1:getetag>
+        <D:supportedlock>
+          <D:lockentry>
+            <D:lockscope>
+              <D:exclusive/>
+            </D:lockscope>
+            <D:locktype>
+              <D:write/>
+            </D:locktype>
+          </D:lockentry>
+          <D:lockentry>
+            <D:lockscope>
+              <D:shared/>
+            </D:lockscope>
+            <D:locktype>
+              <D:write/>
+            </D:locktype>
+          </D:lockentry>
+        </D:supportedlock>
+        <D:lockdiscovery/>
+        <D:getcontenttype>httpd/unix-directory</D:getcontenttype>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response xmlns:lp1="DAV:" xmlns:lp2="http://apache.org/dav/props/">
+    <D:href>/davstuff/DavLock.pag</D:href>
+    <D:propstat>
+      <D:prop>
+        <lp1:resourcetype/>
+        <lp1:creationdate>2012-04-25T12:13:33Z</lp1:creationdate>
+        <lp1:getcontentlength>0</lp1:getcontentlength>
+        <lp1:getlastmodified>Wed, 25 Apr 2012 12:13:33 GMT</lp1:getlastmodified>
+        <lp1:getetag>"4e401f-0-4be7fccdc4eee"</lp1:getetag>
+        <lp2:executable>F</lp2:executable>
+        <D:supportedlock>
+          <D:lockentry>
+            <D:lockscope>
+              <D:exclusive/>
+            </D:lockscope>
+            <D:locktype>
+              <D:write/>
+            </D:locktype>
+          </D:lockentry>
+          <D:lockentry>
+            <D:lockscope>
+              <D:shared/>
+            </D:lockscope>
+            <D:locktype>
+              <D:write/>
+            </D:locktype>
+          </D:lockentry>
+        </D:supportedlock>
+        <D:lockdiscovery/>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response xmlns:lp1="DAV:" xmlns:lp2="http://apache.org/dav/props/">
+    <D:href>/davstuff/DavLock.dir</D:href>
+    <D:propstat>
+      <D:prop>
+        <lp1:resourcetype/>
+        <lp1:creationdate>2012-04-25T12:13:33Z</lp1:creationdate>
+        <lp1:getcontentlength>0</lp1:getcontentlength>
+        <lp1:getlastmodified>Wed, 25 Apr 2012 12:13:33 GMT</lp1:getlastmodified>
+        <lp1:getetag>"4e401e-0-4be7fccdc41e8"</lp1:getetag>
+        <lp2:executable>F</lp2:executable>
+        <D:supportedlock>
+          <D:lockentry>
+            <D:lockscope>
+              <D:exclusive/>
+            </D:lockscope>
+            <D:locktype>
+              <D:write/>
+            </D:locktype>
+          </D:lockentry>
+          <D:lockentry>
+            <D:lockscope>
+              <D:shared/>
+            </D:lockscope>
+            <D:locktype>
+              <D:write/>
+            </D:locktype>
+          </D:lockentry>
+        </D:supportedlock>
+        <D:lockdiscovery/>
+        <D:getcontenttype>application/x-director</D:getcontenttype>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>

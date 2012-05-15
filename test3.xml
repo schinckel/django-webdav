@@ -1,0 +1,23 @@
+PROPFIND  /browncloud/webdav/browncloud/ HTTP/1.1
+Host: localhost
+Depth: 1
+Content-Type: text/xml; charset="utf-8"
+
+<?xml version="1.0" encoding="utf-8" ?>
+<D:propfind xmlns:D="DAV:">
+  <D:allprop/>
+</D:propfind>
+
+PROPFIND  /davstuff/ HTTP/1.1
+Host: localhost
+Depth: 1
+Content-Type: text/xml; charset="utf-8"
+
+<?xml version="1.0" encoding="utf-8" ?>
+<D:propfind xmlns:D="DAV:">
+  <D:allprop/>
+</D:propfind>
+
+
+OPTIONS /browncloud/webdav/browncloud/ HTTP/1.1 
+OPTIONS /davstuff/ HTTP/1.1 
