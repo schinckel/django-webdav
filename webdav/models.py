@@ -18,10 +18,13 @@ def _recurse_file_size(d):
 class WebdavPath(models.Model):
     QUOTA_SIZE_MULT = 1024 * 1024 # megs
 
-    
     url_path = models.CharField(max_length=1024)
     local_path = models.CharField(max_length=1024)
     quota = models.IntegerField()
+    read_access = models.CharField(max_length=2048, blank=True)
+    write_access = models.CharField(max_length=2048, blank=True)
+    new_file_access = models.CharField(max_length=2048, blank=True)
+    delete_access = models.CharField(max_length=2048, blank=True)
 
     def get_local_path(self, path):
         return os.path.normpath("%s/%s"%(self.local_path, path[len(self.url_path):]))

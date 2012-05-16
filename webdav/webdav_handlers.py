@@ -30,8 +30,8 @@ class PropfindHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        if not check_restriction_read(found_path):
-            return HttpResponse('read', None, 401) 
+        if not check_restriction_read(request.user, found_path):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
         lcpath = found_path.get_local_path(path)
         if not os.path.isdir(lcpath):
             return HttpResponseNotFound()
@@ -82,18 +82,39 @@ class GetHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        if not check_restriction_read(found_path):
-            return HttpResponse('read', None, 401) 
+        if not check_restriction_read(request.user, found_path):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
         lcpath = found_path.get_local_path(path)
         if not os.path.isfile(lcpath):
             return HttpResponseNotFound()        
-        fsock = open(lcpath, "r")
+        try:
+            fsock = file(lcpath, "r")
+        except IOError, ioe:
+            logger.warning("invalid file permissions '%s' ('%s'); %s"%(
+                found_path.url_path, lcpath, ioe))
+            return HttpResponseUnauthorized("401 Unauthorized (internal)")
         filename = os.path.basename(lcpath)
         filesize = os.path.getsize(lcpath)
         response = HttpResponse(fsock)
         response['Content-Disposition'] = 'attachment; filename=' + filename
         return response
 
+
+class HeadHandler(MethodHandler):
+
+    def handle(self, request, path):
+        found_path = WebdavPath.get_match_path_to_dir(path)
+        if not found_path:
+            return HttpResponseNotFound()
+        if not check_restriction_read(request.user, found_path):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
+        lcpath = found_path.get_local_path(path)
+        if not os.path.isfile(lcpath):
+            return HttpResponseNotFound()        
+        response = HttpResponse()
+        response['Content-Disposition'] = 'attachment; filename=' + filename
+        return response
+    
 
 class PutHandler(MethodHandler):
 
@@ -102,12 +123,14 @@ class PutHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
-        if os.path.isfile(lcpath):
-            if not check_restriction_write(found_path):
-                return HttpResponse('write', None, 401) 
+        if os.path.isdir(lcpath):
+            return HttpResponseBadRequest()
+        elif os.path.isfile(lcpath):
+            if not check_restriction_write(request.user, found_path):
+                return HttpResponseUnauthorized("401 Unauthorized WRITE")
         else:
-            if not check_restriction_new_file(found_path):
-                return HttpResponse('newfile', None, 401) 
+            if not check_restriction_new_file(request.user, found_path):
+                return HttpResponseUnauthorized("401 Unauthorized NEW FILE")
         try:
             content_length = int(request.META.get("CONTENT_LENGTH"))
         except (ValueError, TypeError):
@@ -118,11 +141,17 @@ class PutHandler(MethodHandler):
             if used_quota + content_length >= max_quota:
                 logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
                     found_path.url_path, lcpath, used_quota, max_quota))
-                return HttpResponse('quota', None, 401) 
+                return HttpResponseUnauthorized("401 Unauthorized QUOTA")
         else:
             used_quota = 0
-            
-        fileout = file(lcpath, "w")
+
+        try:
+            fileout = file(lcpath, "w")
+        except IOError, ioe:
+            logger.warning("invalid file permissions '%s' ('%s'); %s"%(
+                found_path.url_path, lcpath, ioe))
+            return HttpResponseUnauthorized("401 Unauthorized (internal)")
+        
         buf = request.read(1024)
         while len(buf) > 0:
             if max_quota > 0:
@@ -131,8 +160,33 @@ class PutHandler(MethodHandler):
                     fileout.close()
                     logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
                         found_path.url_path, lcpath, used_quota, max_quota))
-                    return HttpResponse('quota', None, 401) 
+                    return HttpResponseUnauthorized("401 Unauthorized QUOTA")
             fileout.write(buf)
             buf = request.read(1024)
         fileout.close()
         return HttpResponse()        
+
+
+class DeleteHandler(MethodHandler):
+
+    def handle(self, request, path):
+        found_path = WebdavPath.get_match_path_to_dir(path)
+        if not found_path:
+            return HttpResponseNotFound()
+        if not check_restriction_delete(request.user, found_path):
+            return HttpResponseUnauthorized("401 Unauthorized DELETE")
+        lcpath = found_path.get_local_path(path)
+        if not os.path.isfile(lcpath):
+            return HttpResponseNotFound()
+        if os.path.isdir(lcpath):
+            pass
+        elif os.path.isfile(lcpath):
+            try:
+                os.remove(lcpath)            
+            except IOError, ioe:
+                logger.warning("invalid file permissions '%s' ('%s'); %s"%(
+                    found_path.url_path, lcpath, ioe))
+                return HttpResponseUnauthorized("401 Unauthorized (internal)")
+        response = HttpResponse()
+        return response
+    

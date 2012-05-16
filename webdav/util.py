@@ -20,22 +20,71 @@ class HttpResponseMultistatus(HttpResponse):
             self[k] = v
 
 
+class HttpResponseUnauthorized(HttpResponse):
+
+    def __init__(self, content='401 Unauthorized', mimetype = None, status = 401, content_type = "text/plain", **kwargs):
+        HttpResponse.__init__(self, content, mimetype, status, content_type)
+        self["WWW-Authenticate"] = "Basic realm=\"%s\""%kwargs.get("realm", "WebDAV")
+            
+    
+            
+
 def format_timestamp(ts):
     dt = datetime.datetime.fromtimestamp(ts)
     return dt.strftime('%a, %d %b %Y %H:%M:%S %Z')
 
 
-def check_restriction_read(webdavpath):
-    return True
+def check_restriction_read(user, webdavpath):
+    if not webdavpath.read_access.strip():
+        return True
+    if not user.is_active:
+        return False
+    if user.is_staff:
+        return True
+    groupsnusers = [s.strip() for s in webdavpath.read_access.split(",")]
+    for grouporuser in groupsnusers:
+        if grouporuser == user.username or grouporuser in user.groups:
+            return True
+    return False
 
-def check_restriction_write(webdavpath):
-    return True
+def check_restriction_write(user, webdavpath):
+    if not webdavpath.write_access.strip():
+        return True
+    if not user.is_active:
+        return False
+    if user.is_staff:
+        return True
+    groupsnusers = [s.strip() for s in webdavpath.write_access.split(",")]
+    for grouporuser in groupsnusers:
+        if grouporuser == user.username or grouporuser in user.groups:
+            return True
+    return False
 
-def check_restriction_delete(webdavpath):
-    return True
+def check_restriction_delete(user, webdavpath):
+    if not webdavpath.delete_access.strip():
+        return True
+    if not user.is_active:
+        return False
+    if user.is_staff:
+        return True
+    groupsnusers = [s.strip() for s in webdavpath.delete_access.split(",")]
+    for grouporuser in groupsnusers:
+        if grouporuser == user.username or grouporuser in user.groups:
+            return True
+    return False
 
-def check_restriction_new_file(webdavpath):
-    return True
+def check_restriction_new_file(user, webdavpath):
+    if not webdavpath.new_file_access.strip():
+        return True
+    if not user.is_active:
+        return False
+    if user.is_staff:
+        return True
+    groupsnusers = [s.strip() for s in webdavpath.new_file_access.split(",")]
+    for grouporuser in groupsnusers:
+        if grouporuser == user.username or grouporuser in user.groups:
+            return True
+    return False
 
 
 class Elem(object):
@@ -115,6 +164,7 @@ class MethodHandlers(dict):
         handler.mhandlers = self
 
     def handle(self, request, path):
+        
         handler = self.get(request.method)
         if handler:
             return handler.handle(request, path)
