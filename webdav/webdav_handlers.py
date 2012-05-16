@@ -28,15 +28,12 @@ class PropfindHandler(MethodHandler):
 
     def handle(self, request, path):
         # Check paths
-        webdav_paths = WebdavPath.objects.all()
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
         if not check_restriction_read(found_path):
             return HttpResponse('', None, 401) 
-
         lcpath = found_path.get_local_path(path)
-
         if not os.path.isdir(lcpath):
             return HttpResponseNotFound()
         
@@ -71,6 +68,8 @@ class PropfindHandler(MethodHandler):
             if "getlastmodified" in find_props:
                 mdate = format_timestamp(st.st_mtime)
                 prop.add_child(Elem("getlastmodified")).add_child(mdate)
+            if "getcontentlength" in find_props:
+                prop.add_child(Elem("getcontentlength")).add_child("%d"%os.path.getsize(fn))
             if os.path.isdir(fn):
                 prop.add_child(Elem("resourcetype")).add_child(Elem("collection"))
             propstat.add_child(Elem("status")).add_child("HTTP/1.1 200 OK")
@@ -84,4 +83,21 @@ class PropfindHandler(MethodHandler):
 class GetHandler(MethodHandler):
 
     def handle(self, request, path):
-        pass
+        # Check paths
+        found_path = WebdavPath.get_match_path_to_dir(path)
+        if not found_path:
+            return HttpResponseNotFound()
+        if not check_restriction_read(found_path):
+            return HttpResponse('', None, 401) 
+        lcpath = found_path.get_local_path(path)
+        if not os.path.isfile(lcpath):
+            return HttpResponseNotFound()
+
+        print lcpath
+
+        fsock = open(lcpath, "r")
+        filename = os.path.basename(lcpath)
+        filesize = os.path.getsize(lcpath)
+        response = HttpResponse(fsock)
+        response['Content-Disposition'] = 'attachment; filename=' + filename
+        return response

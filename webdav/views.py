@@ -6,6 +6,7 @@ from webdav_handlers import *
 handlers = util.MethodHandlers()
 handlers.add_handler("OPTIONS", OptionsHandler())
 handlers.add_handler("PROPFIND", PropfindHandler())
+handlers.add_handler("GET", GetHandler())
 
 @csrf_exempt
 def default(request, **kwargs):
