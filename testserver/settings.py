@@ -152,14 +152,25 @@ LOGGING = {
     #         'propagate': True,
     #     },
     # }
+    'formatters': {
+        'normal': {
+            'format': '%(levelname)s %(asctime)s %(module)s: %(message)s'
+        }
+    },
     'handlers': {
         'console': {
             'level': 'DEBUG',
-            'class': 'logging.StreamHandler'
+            'class': 'logging.StreamHandler',
+            'formatter': 'normal',
             }
             },
     'loggers': {
         'django.request': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+            },
+        'webdav': {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': True,

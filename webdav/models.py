@@ -1,3 +1,5 @@
 from django.db import models
 
-# Create your models here.
+class WebdavPath(models.Model):
+    url_path = models.CharField(max_length=1024)
+    local_path = models.CharField(max_length=1024)

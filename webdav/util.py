@@ -5,21 +5,37 @@ Licensed under GNU GPLv3
 General helper functions and classes.
 Part of the django-webdav project.
 """
+import logging
 import datetime
 from xml.dom import minidom as dom
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseNotAllowed
 
+logger = logging.getLogger("webdav")
 
 class HttpResponseMultistatus(HttpResponse):
 
-    def __init__(self, content='', mimetype = None, status = 207, content_type = "text/xml"):
+    def __init__(self, content='', mimetype = None, status = 207, content_type = "text/xml", **kwargs):
         HttpResponse.__init__(self, content, mimetype, status, content_type)
+        for k, v in kwargs.items():
+            self[k] = v
 
 
-def get_iso8601(value):
-    if not hasattr(value, "isoformat"): # must be a timestamp then
-        value = datetime.datetime.fromtimestamp(value)
-    return value.isoformat("T")
+def format_timestamp(ts):
+    dt = datetime.datetime.fromtimestamp(ts)
+    return dt.strftime('%a, %d %b %Y %H:%M:%S %Z')
+
+
+def check_restriction_read(webdavpath):
+    return True
+
+def check_restriction_write(webdavpath):
+    return True
+
+def check_restriction_delete(webdavpath):
+    return True
+
+def check_restriction_new_file(webdavpath):
+    return True
 
 
 class Elem(object):
@@ -45,6 +61,10 @@ class Elem(object):
         s += "</%s>"%self.name
         return s
 
+    def add_child(self, child):
+        self.children.append(child)
+        return child
+    
     def find_children(self, name):
         r = []
         for child in self.children:
@@ -81,6 +101,9 @@ class Elem(object):
 
 class MethodHandler(object):
 
+    def __init__(self, mhandlers = None):
+        self.mhandlers = mhandlers
+    
     def handle(self, request, path):
         raise NotImplementedError()
 
@@ -89,11 +112,13 @@ class MethodHandlers(dict):
 
     def add_handler(self, method, handler):
         self[method] = handler
+        handler.mhandlers = self
 
     def handle(self, request, path):
         handler = self.get(request.method)
         if handler:
             return handler.handle(request, path)
-        return HttpResponseBadRequest()
+        logger.info("method '%s' not supported"%request.method)
+        return HttpResponseNotAllowed(self.keys())
 
 
