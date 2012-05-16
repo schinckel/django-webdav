@@ -27,14 +27,13 @@ class OptionsHandler(MethodHandler):
 class PropfindHandler(MethodHandler):
 
     def handle(self, request, path):
-        path = os.path.normpath(path)
         # Check paths
         webdav_paths = WebdavPath.objects.all()
         found_path = None
         for wdp in webdav_paths:
-            if path == os.path.normpath(wdp.url_path):
+            if path.startswith(os.path.normpath(wdp.url_path)):
                 if not os.path.isdir(wdp.local_path):
-                    logger.warning("trying to access non-existant local path '%s'"%wdp.local_path)
+                    logger.warning("trying to access '%s' using non-existant local path '%s'"%(wdp.url_path, wdp.local_path))
                     return HttpResponseBadRequest()
                 if not check_restriction_read(wdp):
                     return HttpResponse('', None, 401) 
@@ -43,6 +42,11 @@ class PropfindHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
 
+        lcpath = os.path.normpath("%s/%s"%(found_path.local_path, path[len(found_path.url_path):]))
+
+        if not os.path.isdir(lcpath):
+            return HttpResponseNotFound()
+        
         # Get property request
         elem = Elem.from_xml(request.body)
         if not elem:
@@ -55,13 +59,16 @@ class PropfindHandler(MethodHandler):
 
         # Return response
         multistatus = Elem("multistatus", xmlns="DAV:")
-        iterfiles = ["."] + os.listdir(found_path.local_path)
+        iterfiles = [lcpath] + os.listdir(lcpath)
+        print iterfiles
+        print "***"
         for filename in iterfiles:
-            fn = os.path.normpath("%s/%s/"%(found_path.local_path, filename))
-            if filename == ".":
+            if filename == lcpath:
                 urn = os.path.normpath(request.path)
+                fn = lcpath
             else:
                 urn = os.path.normpath("%s/%s"%(request.path, filename))
+                fn = os.path.normpath("%s/%s/"%(lcpath, filename))
             response = multistatus.add_child(Elem("response"))
             response.add_child(Elem("href")).add_child(urn)
             propstat = response.add_child(Elem("propstat"))
