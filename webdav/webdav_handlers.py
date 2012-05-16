@@ -29,20 +29,13 @@ class PropfindHandler(MethodHandler):
     def handle(self, request, path):
         # Check paths
         webdav_paths = WebdavPath.objects.all()
-        found_path = None
-        for wdp in webdav_paths:
-            if path.startswith(os.path.normpath(wdp.url_path)):
-                if not os.path.isdir(wdp.local_path):
-                    logger.warning("trying to access '%s' using non-existant local path '%s'"%(wdp.url_path, wdp.local_path))
-                    return HttpResponseBadRequest()
-                if not check_restriction_read(wdp):
-                    return HttpResponse('', None, 401) 
-                found_path = wdp
-                break
+        found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
+        if not check_restriction_read(found_path):
+            return HttpResponse('', None, 401) 
 
-        lcpath = os.path.normpath("%s/%s"%(found_path.local_path, path[len(found_path.url_path):]))
+        lcpath = found_path.get_local_path(path)
 
         if not os.path.isdir(lcpath):
             return HttpResponseNotFound()
@@ -60,8 +53,6 @@ class PropfindHandler(MethodHandler):
         # Return response
         multistatus = Elem("multistatus", xmlns="DAV:")
         iterfiles = [lcpath] + os.listdir(lcpath)
-        print iterfiles
-        print "***"
         for filename in iterfiles:
             if filename == lcpath:
                 urn = os.path.normpath(request.path)
@@ -93,9 +84,4 @@ class PropfindHandler(MethodHandler):
 class GetHandler(MethodHandler):
 
     def handle(self, request, path):
-        response = HttpResponse()
-        if self.mhandlers:
-            response["Allow"] = ", ".join(self.mhandlers.keys())
-        response["DAV"] = "1, 2, ordered-collections"
-        return response
-    
+        pass
