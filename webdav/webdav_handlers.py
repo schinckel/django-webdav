@@ -27,17 +27,14 @@ class OptionsHandler(MethodHandler):
 class PropfindHandler(MethodHandler):
 
     def handle(self, request, path):
-        # Check paths
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
         if not check_restriction_read(found_path):
-            return HttpResponse('', None, 401) 
+            return HttpResponse('read', None, 401) 
         lcpath = found_path.get_local_path(path)
         if not os.path.isdir(lcpath):
             return HttpResponseNotFound()
-        
-        # Get property request
         elem = Elem.from_xml(request.body)
         if not elem:
             return HttpResponseBadRequest()
@@ -83,21 +80,60 @@ class PropfindHandler(MethodHandler):
 class GetHandler(MethodHandler):
 
     def handle(self, request, path):
-        # Check paths
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
         if not check_restriction_read(found_path):
-            return HttpResponse('', None, 401) 
+            return HttpResponse('read', None, 401) 
         lcpath = found_path.get_local_path(path)
         if not os.path.isfile(lcpath):
-            return HttpResponseNotFound()
-
-        print lcpath
-
+            return HttpResponseNotFound()        
         fsock = open(lcpath, "r")
         filename = os.path.basename(lcpath)
         filesize = os.path.getsize(lcpath)
         response = HttpResponse(fsock)
         response['Content-Disposition'] = 'attachment; filename=' + filename
         return response
+
+
+class PutHandler(MethodHandler):
+
+    def handle(self, request, path):
+        found_path = WebdavPath.get_match_path_to_dir(path)
+        if not found_path:
+            return HttpResponseNotFound()
+        lcpath = found_path.get_local_path(path)
+        if os.path.isfile(lcpath):
+            if not check_restriction_write(found_path):
+                return HttpResponse('write', None, 401) 
+        else:
+            if not check_restriction_new_file(found_path):
+                return HttpResponse('newfile', None, 401) 
+        try:
+            content_length = int(request.META.get("CONTENT_LENGTH"))
+        except (ValueError, TypeError):
+            content_length = 0
+        max_quota = found_path.quota * WebdavPath.QUOTA_SIZE_MULT
+        if max_quota > 0:
+            used_quota = found_path.get_used_quota()
+            if used_quota + content_length >= max_quota:
+                logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
+                    found_path.url_path, lcpath, used_quota, max_quota))
+                return HttpResponse('quota', None, 401) 
+        else:
+            used_quota = 0
+            
+        fileout = file(lcpath, "w")
+        buf = request.read(1024)
+        while len(buf) > 0:
+            if max_quota > 0:
+                used_quota += len(buf)
+                if used_quota >= max_quota:
+                    fileout.close()
+                    logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
+                        found_path.url_path, lcpath, used_quota, max_quota))
+                    return HttpResponse('quota', None, 401) 
+            fileout.write(buf)
+            buf = request.read(1024)
+        fileout.close()
+        return HttpResponse()        

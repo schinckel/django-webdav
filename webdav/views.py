@@ -7,6 +7,7 @@ handlers = util.MethodHandlers()
 handlers.add_handler("OPTIONS", OptionsHandler())
 handlers.add_handler("PROPFIND", PropfindHandler())
 handlers.add_handler("GET", GetHandler())
+handlers.add_handler("PUT", PutHandler())
 
 @csrf_exempt
 def default(request, **kwargs):
