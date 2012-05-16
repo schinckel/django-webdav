@@ -43,7 +43,6 @@ class PropfindHandler(MethodHandler):
             for child2 in child.children:
                 if hasattr(child2, "name"):
                     find_props.append(child2.name)
-
         # Return response
         multistatus = Elem("multistatus", xmlns="DAV:")
         iterfiles = [lcpath] + os.listdir(lcpath)
