@@ -30,8 +30,8 @@ class PropfindHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        acl = DirectoryACL(found_path, lcpath)
         if not acl.perm_read(request.user):
             return HttpResponseUnauthorized("401 Unauthorized READ")
         if not os.path.isdir(lcpath):
@@ -114,8 +114,8 @@ class HeadHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        acl = DirectoryACL(found_path, lcpath)
         if (os.path.basename(lcpath) == acl.ACL_FILENAME 
             and not acl.perm_acl(request.user)):
             return HttpResponseNotFound()        
@@ -134,8 +134,8 @@ class PutHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        acl = DirectoryACL(found_path, lcpath)
         if (os.path.basename(lcpath) == acl.ACL_FILENAME 
             and not acl.perm_acl(request.user)):
             return HttpResponseUnauthorized("401 Unauthorized ACL")
@@ -189,8 +189,8 @@ class DeleteHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        acl = DirectoryACL(found_path, lcpath)
         if (os.path.basename(lcpath) == acl.ACL_FILENAME 
             and not acl.perm_acl(request.user)):
             return HttpResponseUnauthorized("401 Unauthorized ACL")

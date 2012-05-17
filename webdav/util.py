@@ -128,14 +128,16 @@ class DirectoryACL(object):
     ACL_NEW_FILE = "new_file"
     ACL_ACL = "acl"
 
-    def __init__(self, webdavpath):
+    def __init__(self, webdavpath, path):
         self.webdavpath = webdavpath
+        self.path = path
+        self.access_lists = {}
         self.read_acl_file()
 
     def read_acl_file(self):
         self.access_lists = {}
-        fn = self.get_acl_filename()
-        if fn and os.path.isfile(fn):
+        fn = self.get_acl_filename(self.path)
+        if fn:
             try:
                 f = file(fn, "r")
                 data = f.read()
@@ -153,12 +155,20 @@ class DirectoryACL(object):
             return True
         return False
 
-    def get_acl_filename(self):
+    def get_acl_filename(self, path):
         if not self.webdavpath:
-            return None
-        local_path = self.webdavpath.local_path
-        return os.path.normpath("%s/%s"%(local_path, 
-                                         self.ACL_FILENAME))
+            return None        
+        local_path = "%s/"%path
+        while local_path.find("/") >= 0:
+            fn = os.path.normpath("%s/%s"%(os.path.dirname(local_path), 
+                                           self.ACL_FILENAME))
+            if os.path.isfile(fn):
+                logger.debug("using ACL file '%s'"%fn)
+                return fn
+            else:
+                logger.debug("no ACL file '%s', ignoring"%fn)
+            local_path = "/".join(local_path.split("/")[:-1])
+        return None
 
     def match_string(self, s, l):
         for a in l:
