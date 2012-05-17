@@ -15,7 +15,7 @@ class WebdavPath(models.Model):
     owner = models.ForeignKey(User)
 
     def get_local_path(self, path):
-        return os.path.normpath("%s/%s"%(self.local_path, path[len(self.url_path):]))
+        return os.path.normpath("%s/%s"%(self.local_path, path[len(self.url_path)-1:]))
 
     @classmethod
     def get_match_path_to_dir(cls, path):
@@ -35,3 +35,4 @@ class WebdavPath(models.Model):
         logger.debug("didn't find any defined paths for '%s'"%path)        
         return None
         
+

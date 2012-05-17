@@ -10,6 +10,8 @@ import logging
 import datetime
 from xml.dom import minidom as dom
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseNotAllowed
+from django.conf import settings
+from django.contrib.auth import authenticate, login
 
 logger = logging.getLogger("webdav")
 
@@ -148,7 +150,7 @@ class DirectoryACL(object):
                 params = line.split("=", 1)
                 if len(params) > 1:
                     listname = params[0].strip()
-                    values = [s.strip() for s in params[1].split(",")]
+                    values = [s.strip() for s in params[1].split(" ")]
                     if listname and values:
                         self.access_lists[listname] = values
             return True
@@ -168,41 +170,56 @@ class DirectoryACL(object):
             local_path = "/".join(local_path.split("/")[:-1])
         return None
 
-    def match_string(self, s, l):
-        for a in l:
-            if a == s or a == "*":
+    def match_user(self, user, lst):
+        for entry in lst:
+            username, groupname = None, None
+            if entry.find(":") >= 0:
+                type_, value = [s.strip() for s in entry.split(":",1)]
+                if type_.lower() == "group":
+                    groupname = value
+                elif type_.lower() == "user":
+                    username = value
+                else:
+                    logger.warning("invalid ACL token type '%s'"%type_)
+            else:
+                username, groupname = entry, entry
+            if username and username == user.username:
                 return True
+            if groupname:
+                groups = user.groups.all()
+                if groups and groupname in [g.name for g in groups]:
+                    return True
         return False
 
     def perm_read(self, user):
         if self.webdavpath and user == self.webdavpath.owner:
             return True
-        return self.match_string(user.username,
-                                 self.access_lists.get(self.ACL_READ, []))
+        return self.match_user(user,
+                               self.access_lists.get(self.ACL_READ, []))
 
     def perm_write(self, user):
         if self.webdavpath and user == self.webdavpath.owner:
             return True
-        return self.match_string(user.username,
-                                 self.access_lists.get(self.ACL_WRITE, []))
+        return self.match_user(user,
+                               self.access_lists.get(self.ACL_WRITE, []))
 
     def perm_delete(self, user):
         if self.webdavpath and user == self.webdavpath.owner:
             return True
-        return self.match_string(user.username,
-                                 self.access_lists.get(self.ACL_DELETE, []))
+        return self.match_user(user,
+                               self.access_lists.get(self.ACL_DELETE, []))
 
     def perm_new_file(self, user):
         if self.webdavpath and user == self.webdavpath.owner:
             return True
-        return self.match_string(user.username,
-                                 self.access_lists.get(self.ACL_NEW_FILE, []))
+        return self.match_user(user,
+                               self.access_lists.get(self.ACL_NEW_FILE, []))
 
     def perm_acl(self, user):
         if self.webdavpath and user == self.webdavpath.owner:
             return True
-        return self.match_string(user.username,
-                                 self.access_lists.get(self.ACL_ACL, []))
+        return self.match_user(user,
+                               self.access_lists.get(self.ACL_ACL, []))
 
 
 def get_used_quota(path):
@@ -222,3 +239,47 @@ def get_used_quota(path):
         logger.warning("could not get quota for '%s'; %s"%(path, ioe))
     return totalsize, totalnum
 
+
+def check_http_authorization(request, webdavpath):
+    if request.user.is_active:
+        return None
+    #print
+    #for k, v in request.META.items():
+    #    print k, "=", str(v)[:16]
+    #print
+    #print
+    # if request.META.has_key("USER") and request.META.has_key("PASSWORD"):
+    #     username = request.META["USER"]
+    #     password = request.META["PASSWORD"]
+    #     user = authenticate(username=username, password=password)
+    #     if user is not None and user.is_active:
+    #         login(request, user)
+    #         logger.info("login via URL '%s'"%username)
+    #         return None
+    #     else:
+    #         logger.warning("failed login via URL '%s'"%username)
+    if request.META.has_key("HTTP_AUTHORIZATION"):
+        authentication = request.META["HTTP_AUTHORIZATION"]
+        spl = authentication.split(" ", 1)
+        if len(spl) == 2:
+            if "basic" == spl[0].lower():
+                token = spl[1].strip().decode('base64')
+                spl2 = token.split(":", 1)
+                if len(spl2) == 2:
+                    username, password = spl2
+                    user = authenticate(username=username, password=password)
+                    if user is not None and user.is_active:
+                        login(request, user)
+                        logger.info("login via basic auth '%s'"%username)
+                        return None
+                    else:
+                        logger.warning("failed login via basic auth '%s'"
+                                       %username)
+    # Ask for auth
+    response = HttpResponse("Authorization required", None, 401, "text/plain")
+    if hasattr(settings, "BASIC_AUTH_REALM"):
+        realm = settings.BASIC_AUTH_REALM
+    else:
+        realm = "django"
+    response['WWW-Authenticate'] = 'Basic realm="%s"'%realm
+    return response

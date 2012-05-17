@@ -1,6 +1,6 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
-import util
+from webdav import util
 from webdav_handlers import *
 
 handlers = util.MethodHandlers()

@@ -32,8 +32,14 @@ class PropfindHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
-        acl = DirectoryACL(found_path, lcpath)
+        acl = DirectoryACL(found_path, lcpath)        
         if not acl.perm_read(request.user):
+            response = check_http_authorization(request, found_path)
+            if response:
+                return response
+        if not acl.perm_read(request.user):
+            logger.info("user '%s' does not have %s permissions for '%s'"
+                        %(request.user.username, acl.ACL_READ, path))
             return HttpResponseNotAllowed("405 Not Allowed")
         elem = Elem.from_xml(request.body)
         if not elem:
@@ -107,6 +113,12 @@ class GetHandler(MethodHandler):
             and not acl.perm_acl(request.user)):
             return HttpResponseNotFound()        
         if not acl.perm_read(request.user):
+            response = check_http_authorization(request, found_path)
+            if response:
+                return response
+        if not acl.perm_read(request.user):
+            logger.info("user '%s' does not have %s permissions for '%s'"
+                        %(request.user.username, acl.ACL_READ, path))
             return HttpResponseNotAllowed("405 Not Allowed")
         if not os.path.isfile(lcpath):
             return HttpResponseNotFound()        
@@ -136,6 +148,12 @@ class HeadHandler(MethodHandler):
             and not acl.perm_acl(request.user)):
             return HttpResponseNotFound()        
         if not acl.perm_read(request.user):
+            response = check_http_authorization(request, found_path)
+            if response:
+                return response
+        if not acl.perm_read(request.user):
+            logger.info("user '%s' does not have %s permissions for '%s'"
+                        %(request.user.username, acl.ACL_READ, path))
             return HttpResponseNotAllowed("405 Not Allowed")
         if not os.path.isfile(lcpath):
             return HttpResponseNotFound()        
@@ -161,9 +179,21 @@ class PutHandler(MethodHandler):
             return HttpResponseBadRequest()
         elif os.path.isfile(lcpath):
             if not acl.perm_write(request.user):
+                response = check_http_authorization(request, found_path)
+                if response:
+                    return response
+            if not acl.perm_write(request.user):
+                logger.info("user '%s' does not have %s permissions for '%s'"
+                            %(request.user.username, acl.ACL_WRITE, path))
                 return HttpResponseNotAllowed("405 Not Allowed")
         else:
             if not acl.perm_new_file(request.user):
+                response = check_http_authorization(request, found_path)
+                if response:
+                    return response
+            if not acl.perm_new_file(request.user):
+                logger.info("user '%s' does not have %s permissions for '%s'"
+                            %(request.user.username, acl.ACL_NEW_FILE, path))
                 return HttpResponseNotAllowed("405 Not Allowed")
         try:
             content_length = int(request.META.get("CONTENT_LENGTH"))
@@ -220,6 +250,12 @@ class DeleteHandler(MethodHandler):
             and not acl.perm_acl(request.user)):
             return HttpResponseNotAllowed("405 Not Allowed")
         if not acl.perm_delete(request.user):
+            response = check_http_authorization(request, found_path)
+            if response:
+                return response
+        if not acl.perm_delete(request.user):
+            logger.info("user '%s' does not have %s permissions for '%s'"
+                        %(request.user.username, acl.ACL_DELETE, path))
             return HttpResponseNotAllowed("405 Not Allowed")
         if not os.path.isfile(lcpath) and not os.path.isdir(lcpath):
             return HttpResponseNotFound()
@@ -253,6 +289,12 @@ class MakedirHandler(MethodHandler):
             and not acl.perm_acl(request.user)):
             return HttpResponseNotAllowed("405 Not Allowed")
         if not acl.perm_new_file(request.user):
+            response = check_http_authorization(request, found_path)
+            if response:
+                return response
+        if not acl.perm_new_file(request.user):
+            logger.info("user '%s' does not have %s permissions for '%s'"
+                        %(request.user.username, acl.ACL_NEW_FILE, path))
             return HttpResponseNotAllowed("405 Not Allowed")
         if os.path.isdir(lcpath) or os.path.isfile(lcpath):
             return HttpResponseNotAllowed("405 Not Allowed")
