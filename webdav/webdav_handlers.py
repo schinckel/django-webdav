@@ -30,9 +30,10 @@ class PropfindHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        if not check_restriction_read(request.user, found_path):
-            return HttpResponseUnauthorized("401 Unauthorized READ")
+        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        if not acl.perm_read(request.user):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
         if not os.path.isdir(lcpath):
             return HttpResponseNotFound()
         elem = Elem.from_xml(request.body)
@@ -47,6 +48,9 @@ class PropfindHandler(MethodHandler):
         multistatus = Elem("multistatus", xmlns="DAV:")
         iterfiles = [lcpath] + os.listdir(lcpath)
         for filename in iterfiles:
+            if (filename == acl.ACL_FILENAME 
+                and not acl.perm_acl(request.user)):
+                continue
             if filename == lcpath:
                 urn = os.path.normpath(request.path)
                 fn = lcpath
@@ -82,9 +86,13 @@ class GetHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        if not check_restriction_read(request.user, found_path):
-            return HttpResponseUnauthorized("401 Unauthorized READ")
+        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
+            and not acl.perm_acl(request.user)):
+            return HttpResponseNotFound()        
+        if not acl.perm_read(request.user):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
         if not os.path.isfile(lcpath):
             return HttpResponseNotFound()        
         try:
@@ -106,9 +114,13 @@ class HeadHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        if not check_restriction_read(request.user, found_path):
-            return HttpResponseUnauthorized("401 Unauthorized READ")
+        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
+            and not acl.perm_acl(request.user)):
+            return HttpResponseNotFound()        
+        if not acl.perm_read(request.user):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
         if not os.path.isfile(lcpath):
             return HttpResponseNotFound()        
         response = HttpResponse()
@@ -122,15 +134,19 @@ class PutHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
+        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
+            and not acl.perm_acl(request.user)):
+            return HttpResponseUnauthorized("401 Unauthorized ACL")
         if os.path.isdir(lcpath):
             return HttpResponseBadRequest()
         elif os.path.isfile(lcpath):
-            if not check_restriction_write(request.user, found_path):
+            if not acl.perm_write(request.user):
                 return HttpResponseUnauthorized("401 Unauthorized WRITE")
         else:
-            if not check_restriction_new_file(request.user, found_path):
-                return HttpResponseUnauthorized("401 Unauthorized NEW FILE")
+            if not acl.perm_new_file(request.user):
+                return HttpResponseUnauthorized("401 Unauthorized NEW_FILE")
         try:
             content_length = int(request.META.get("CONTENT_LENGTH"))
         except (ValueError, TypeError):
@@ -173,10 +189,14 @@ class DeleteHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        if not check_restriction_delete(request.user, found_path):
-            return HttpResponseUnauthorized("401 Unauthorized DELETE")
+        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
-        if not os.path.isfile(lcpath):
+        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
+            and not acl.perm_acl(request.user)):
+            return HttpResponseUnauthorized("401 Unauthorized ACL")
+        if not acl.perm_delete(request.user):
+            return HttpResponseUnauthorized("401 Unauthorized READ")
+        if not os.path.isfile(lcpath) and not os.path.isdir(lcpath):
             return HttpResponseNotFound()
         if os.path.isdir(lcpath):
             pass

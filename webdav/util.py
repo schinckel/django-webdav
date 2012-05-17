@@ -5,6 +5,7 @@ Licensed under GNU GPLv3
 General helper functions and classes.
 Part of the django-webdav project.
 """
+import os
 import logging
 import datetime
 from xml.dom import minidom as dom
@@ -32,59 +33,6 @@ class HttpResponseUnauthorized(HttpResponse):
 def format_timestamp(ts):
     dt = datetime.datetime.fromtimestamp(ts)
     return dt.strftime('%a, %d %b %Y %H:%M:%S %Z')
-
-
-def check_restriction_read(user, webdavpath):
-    if not webdavpath.read_access.strip():
-        return True
-    if not user.is_active:
-        return False
-    if user.is_staff:
-        return True
-    groupsnusers = [s.strip() for s in webdavpath.read_access.split(",")]
-    for grouporuser in groupsnusers:
-        if grouporuser == user.username or grouporuser in user.groups:
-            return True
-    return False
-
-def check_restriction_write(user, webdavpath):
-    if not webdavpath.write_access.strip():
-        return True
-    if not user.is_active:
-        return False
-    if user.is_staff:
-        return True
-    groupsnusers = [s.strip() for s in webdavpath.write_access.split(",")]
-    for grouporuser in groupsnusers:
-        if grouporuser == user.username or grouporuser in user.groups:
-            return True
-    return False
-
-def check_restriction_delete(user, webdavpath):
-    if not webdavpath.delete_access.strip():
-        return True
-    if not user.is_active:
-        return False
-    if user.is_staff:
-        return True
-    groupsnusers = [s.strip() for s in webdavpath.delete_access.split(",")]
-    for grouporuser in groupsnusers:
-        if grouporuser == user.username or grouporuser in user.groups:
-            return True
-    return False
-
-def check_restriction_new_file(user, webdavpath):
-    if not webdavpath.new_file_access.strip():
-        return True
-    if not user.is_active:
-        return False
-    if user.is_staff:
-        return True
-    groupsnusers = [s.strip() for s in webdavpath.new_file_access.split(",")]
-    for grouporuser in groupsnusers:
-        if grouporuser == user.username or grouporuser in user.groups:
-            return True
-    return False
 
 
 class Elem(object):
@@ -172,3 +120,78 @@ class MethodHandlers(dict):
         return HttpResponseNotAllowed(self.keys())
 
 
+class DirectoryACL(object):
+    ACL_FILENAME = ".webdav-acl"
+    ACL_READ = "read"
+    ACL_WRITE = "write"
+    ACL_DELETE = "delete"
+    ACL_NEW_FILE = "new_file"
+    ACL_ACL = "acl"
+
+    def __init__(self, webdavpath):
+        self.webdavpath = webdavpath
+        self.read_acl_file()
+
+    def read_acl_file(self):
+        self.access_lists = {}
+        fn = self.get_acl_filename()
+        if fn and os.path.isfile(fn):
+            try:
+                f = file(fn, "r")
+                data = f.read()
+                f.close()
+            except IOError, ioe:
+                logger.warning("could not read ACL file '%s'; %s"%(fn, ioe))
+                return False
+            for line in data.split("\n"):
+                params = line.split("=", 1)
+                if len(params) > 1:
+                    listname = params[0].strip()
+                    values = [s.strip() for s in params[1].split(",")]
+                    if listname and values:
+                        self.access_lists[listname] = values
+            return True
+        return False
+
+    def get_acl_filename(self):
+        if not self.webdavpath:
+            return None
+        local_path = self.webdavpath.local_path
+        return os.path.normpath("%s/%s"%(local_path, 
+                                         self.ACL_FILENAME))
+
+    def match_string(self, s, l):
+        for a in l:
+            if a == s or a == "*":
+                return True
+        return False
+
+    def perm_read(self, user):
+        if self.webdavpath and user == self.webdavpath.owner:
+            return True
+        return self.match_string(user.username,
+                                 self.access_lists.get(self.ACL_READ, []))
+
+    def perm_write(self, user):
+        if self.webdavpath and user == self.webdavpath.owner:
+            return True
+        return self.match_string(user.username,
+                                 self.access_lists.get(self.ACL_WRITE, []))
+
+    def perm_delete(self, user):
+        if self.webdavpath and user == self.webdavpath.owner:
+            return True
+        return self.match_string(user.username,
+                                 self.access_lists.get(self.ACL_DELETE, []))
+
+    def perm_new_file(self, user):
+        if self.webdavpath and user == self.webdavpath.owner:
+            return True
+        return self.match_string(user.username,
+                                 self.access_lists.get(self.ACL_NEW_FILE, []))
+
+    def perm_acl(self, user):
+        if self.webdavpath and user == self.webdavpath.owner:
+            return True
+        return self.match_string(user.username,
+                                 self.access_lists.get(self.ACL_ACL, []))
