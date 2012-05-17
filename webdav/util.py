@@ -203,3 +203,22 @@ class DirectoryACL(object):
             return True
         return self.match_string(user.username,
                                  self.access_lists.get(self.ACL_ACL, []))
+
+
+def get_used_quota(path):
+    totalsize = 0
+    totalnum = 0
+    try:
+        if os.path.isdir(path):
+            for filename in os.listdir(path):
+                fn = os.path.normpath("%s/%s"%(path, filename))
+                addsize, addnum = get_used_quota(fn)
+                totalsize += addsize
+                totalnum += addnum
+        else:
+            totalsize = os.path.getsize(path)
+            totalnum = 1
+    except IOError, ioe:
+        logger.warning("could not get quota for '%s'; %s"%(path, ioe))
+    return totalsize, totalnum
+
