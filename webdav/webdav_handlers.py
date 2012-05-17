@@ -77,6 +77,7 @@ class PropfindHandler(MethodHandler):
         logger.debug("returned collection '%s' from '%s'"%(
             found_path.url_path, found_path.local_path))
         xml = multistatus.get_xml()
+        logger.info("listed dir '%s' ('%s')"%(found_path.url_path, lcpath))
         return HttpResponseMultistatus(xml, DAV = "1, 2, ordered-collections")
 
 
@@ -86,8 +87,8 @@ class GetHandler(MethodHandler):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        acl = DirectoryACL(found_path)
         lcpath = found_path.get_local_path(path)
+        acl = DirectoryACL(found_path, lcpath)
         if (os.path.basename(lcpath) == acl.ACL_FILENAME 
             and not acl.perm_acl(request.user)):
             return HttpResponseNotFound()        
@@ -105,6 +106,7 @@ class GetHandler(MethodHandler):
         filesize = os.path.getsize(lcpath)
         response = HttpResponse(fsock)
         response['Content-Disposition'] = 'attachment; filename=' + filename
+        logger.info("read file '%s' ('%s')"%(found_path.url_path, lcpath))
         return response
 
 
@@ -124,7 +126,9 @@ class HeadHandler(MethodHandler):
         if not os.path.isfile(lcpath):
             return HttpResponseNotFound()        
         response = HttpResponse()
+        filename = os.path.basedir(lcpath)
         response['Content-Disposition'] = 'attachment; filename=' + filename
+        logger.info("head file '%s' ('%s')"%(found_path.url_path, lcpath))
         return response
     
 
@@ -180,6 +184,7 @@ class PutHandler(MethodHandler):
             fileout.write(buf)
             buf = request.read(1024)
         fileout.close()
+        logger.info("wrote file '%s' ('%s')"%(found_path.url_path, lcpath))
         return HttpResponse()        
 
 
@@ -203,6 +208,7 @@ class DeleteHandler(MethodHandler):
         elif os.path.isfile(lcpath):
             try:
                 os.remove(lcpath)            
+                logger.info("removed file '%s' ('%s')"%(found_path.url_path, lcpath))
             except IOError, ioe:
                 logger.warning("invalid file permissions '%s' ('%s'); %s"%(
                     found_path.url_path, lcpath, ioe))

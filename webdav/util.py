@@ -26,8 +26,7 @@ class HttpResponseUnauthorized(HttpResponse):
     def __init__(self, content='401 Unauthorized', mimetype = None, status = 401, content_type = "text/plain", **kwargs):
         HttpResponse.__init__(self, content, mimetype, status, content_type)
         self["WWW-Authenticate"] = "Basic realm=\"%s\""%kwargs.get("realm", "WebDAV")
-            
-    
+
             
 
 def format_timestamp(ts):
