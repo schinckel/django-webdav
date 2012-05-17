@@ -157,10 +157,9 @@ class DirectoryACL(object):
     def get_acl_filename(self, path):
         if not self.webdavpath:
             return None        
-        local_path = "%s/"%path
+        local_path = os.path.dirname("%s/"%path)
         while local_path.find("/") >= 0:
-            fn = os.path.normpath("%s/%s"%(os.path.dirname(local_path), 
-                                           self.ACL_FILENAME))
+            fn = os.path.normpath("%s/%s"%(local_path, self.ACL_FILENAME))
             if os.path.isfile(fn):
                 logger.debug("using ACL file '%s'"%fn)
                 return fn

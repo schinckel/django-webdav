@@ -9,7 +9,7 @@ handlers.add_handler("PROPFIND", PropfindHandler())
 handlers.add_handler("GET", GetHandler())
 handlers.add_handler("HEAD", HeadHandler())
 handlers.add_handler("PUT", PutHandler())
-handlers.add_handler("DELETE", PutHandler())
+handlers.add_handler("DELETE", DeleteHandler())
 
 @csrf_exempt
 def default(request, **kwargs):

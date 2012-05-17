@@ -8,6 +8,7 @@ Part of the django-webdav project.
 import logging
 
 import os
+import shutil
 from webdav.util import *
 from webdav.models import WebdavPath
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseNotAllowed
@@ -46,7 +47,12 @@ class PropfindHandler(MethodHandler):
                     find_props.append(child2.name)
         # Return response
         multistatus = Elem("multistatus", xmlns="DAV:")
-        iterfiles = [lcpath] + os.listdir(lcpath)
+        try:
+            iterfiles = [lcpath] + os.listdir(lcpath)
+        except IOError, ioe:
+            logger.warning("could not list directory '%s'; %s"%(lcpath, ioe))
+            return HttpResponseNotAllowed("405 Not allowed")
+
         for filename in iterfiles:
             if (filename == acl.ACL_FILENAME 
                 and not acl.perm_acl(request.user)):
@@ -77,7 +83,7 @@ class PropfindHandler(MethodHandler):
         logger.debug("returned collection '%s' from '%s'"%(
             found_path.url_path, found_path.local_path))
         xml = multistatus.get_xml()
-        logger.info("listed dir '%s' ('%s')"%(found_path.url_path, lcpath))
+        logger.info("listed dir '%s'"%lcpath)
         return HttpResponseMultistatus(xml, DAV = "1, 2, ordered-collections")
 
 
@@ -99,9 +105,9 @@ class GetHandler(MethodHandler):
         try:
             fsock = file(lcpath, "r")
         except IOError, ioe:
-            logger.warning("invalid file permissions '%s' ('%s'); %s"%(
-                found_path.url_path, lcpath, ioe))
-            return HttpResponseUnauthorized("401 Unauthorized (internal)")
+            logger.warning("could read file '%s' ('%s'); %s"%(
+                    found_path.url_path, lcpath, ioe))
+            return HttpResponseNotAllowed("405 Not allowed")
         filename = os.path.basename(lcpath)
         filesize = os.path.getsize(lcpath)
         response = HttpResponse(fsock)
@@ -161,16 +167,15 @@ class PutHandler(MethodHandler):
             if used_quota + content_length >= max_quota:
                 logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
                     found_path.url_path, lcpath, used_quota, max_quota))
-                return HttpResponseUnauthorized("401 Unauthorized QUOTA")
+                return HttpResponseNotAllowed("405 Not allowed")
         else:
             used_quota = 0
 
         try:
             fileout = file(lcpath, "w")
         except IOError, ioe:
-            logger.warning("invalid file permissions '%s' ('%s'); %s"%(
-                found_path.url_path, lcpath, ioe))
-            return HttpResponseUnauthorized("401 Unauthorized (internal)")
+            logger.warning("could write file '%s'; %s"%(lcpath, ioe))
+            return HttpResponseNotAllowed("405 Not allowed")
         
         buf = request.read(1024)
         while len(buf) > 0:
@@ -180,11 +185,11 @@ class PutHandler(MethodHandler):
                     fileout.close()
                     logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
                         found_path.url_path, lcpath, used_quota, max_quota))
-                    return HttpResponseUnauthorized("401 Unauthorized QUOTA")
+                    return HttpResponseNotAllowed("405 Not allowed")
             fileout.write(buf)
             buf = request.read(1024)
         fileout.close()
-        logger.info("wrote file '%s' ('%s')"%(found_path.url_path, lcpath))
+        logger.info("wrote file '%s'"%lcpath)
         return HttpResponse()        
 
 
@@ -204,15 +209,19 @@ class DeleteHandler(MethodHandler):
         if not os.path.isfile(lcpath) and not os.path.isdir(lcpath):
             return HttpResponseNotFound()
         if os.path.isdir(lcpath):
-            pass
+            try:
+                shutil.rmtree(lcpath)
+                logger.info("removed directory '%s'"%lcpath)
+            except IOError, ioe:
+                logger.warning("could not remove directory '%s'; %s"%(lcpath, ioe))
+                return HttpResponseNotAllowed("405 Not allowed")            
         elif os.path.isfile(lcpath):
             try:
                 os.remove(lcpath)            
-                logger.info("removed file '%s' ('%s')"%(found_path.url_path, lcpath))
+                logger.info("removed file '%s'"%lcpath)
             except IOError, ioe:
-                logger.warning("invalid file permissions '%s' ('%s'); %s"%(
-                    found_path.url_path, lcpath, ioe))
-                return HttpResponseUnauthorized("401 Unauthorized (internal)")
+                logger.warning("could not remove file '%s'; %s"%(lcpath, ioe))
+                return HttpResponseNotAllowed("405 Not allowed")
         response = HttpResponse()
         return response
     
