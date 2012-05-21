@@ -36,6 +36,8 @@ class PropfindHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         acl = DirectoryACL(found_path, lcpath)
         response = check_http_authorization(acl, request, found_path, "read")
         if response:
@@ -115,6 +117,8 @@ class GetHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         acl = DirectoryACL(found_path, lcpath)
         response = check_http_authorization(acl, request, found_path, "read")
         if response:
@@ -147,6 +151,8 @@ class HeadHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         acl = DirectoryACL(found_path, lcpath)
         response = check_http_authorization(acl, request, found_path, "read")
         if response:
@@ -179,6 +185,8 @@ class PutHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)        
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         acl = DirectoryACL(found_path, lcpath)
         if is_file(lcpath):
             response = check_http_authorization(acl, request, found_path, "write")
@@ -244,6 +252,8 @@ class DeleteHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         acl = DirectoryACL(found_path, lcpath)
         response = check_http_authorization(acl, request, found_path, "delete")
         if response:
@@ -281,6 +291,8 @@ class MakedirHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         acl = DirectoryACL(found_path, lcpath)
         response = check_http_authorization(acl, request, found_path, "new_file")
         if response:
@@ -309,6 +321,8 @@ class CopyHandler(MethodHandler):
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
+        if not lcpath:
+            return HttpResponseForbidden("403 Internal")
         response = check_http_authorization(acl, request, found_path, "new_file")
         if response:
             return response

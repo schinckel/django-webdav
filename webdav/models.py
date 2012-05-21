@@ -19,7 +19,10 @@ class WebdavPath(models.Model):
     def get_local_path(self, path = None):
         if not path:
             path = self._matched_path
-        return os.path.normpath("%s/%s"%(self.local_path, path[len(self.url_path)-1:]))
+        ret = os.path.abspath(os.path.normpath("%s/%s"%(self.local_path, path[len(self.url_path)-1:])))
+        if ret.startswith(self.local_path):
+            return ret
+        return None
 
     @classmethod
     def get_match_path_to_dir(cls, path):
