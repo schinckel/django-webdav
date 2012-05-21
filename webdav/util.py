@@ -122,7 +122,7 @@ class MethodHandler(object):
     def __init__(self, mhandlers = None):
         self.mhandlers = mhandlers
     
-    def handle(self, request, path):
+    def handle(self, request):
         raise NotImplementedError()
 
 
@@ -132,11 +132,11 @@ class MethodHandlers(dict):
         self[method] = handler
         handler.mhandlers = self
 
-    def handle(self, request, path):
+    def handle(self, request):
         
         handler = self.get(request.method)
         if handler:
-            return handler.handle(request, path)
+            return handler.handle(request)
         logger.info("method '%s' not supported"%request.method)
         return HttpResponseNotAllowed(self.keys())
 
@@ -179,14 +179,15 @@ class DirectoryACL(object):
     def get_acl_filename(self, path):
         if not self.webdavpath:
             return None        
-        local_path = os.path.dirname("%s/"%path)
+        local_path = os.path.abspath(os.path.dirname("%s/"%path))
         while local_path.find("/") >= 0:
-            fn = os.path.normpath("%s/%s"%(local_path, self.ACL_FILENAME))
-            if is_file(fn):
-                logger.debug("using ACL file '%s'"%fn)
-                return fn
-            else:
-                logger.debug("no ACL file '%s', ignoring"%fn)
+            if is_dir(local_path):
+                fn = os.path.normpath("%s/%s"%(local_path, self.ACL_FILENAME))
+                if is_file(fn):
+                    logger.debug("using ACL file '%s'"%fn)
+                    return fn
+                else:
+                    logger.debug("no ACL file '%s', ignoring"%fn)
             local_path = "/".join(local_path.split("/")[:-1])
         return None
 
@@ -301,3 +302,10 @@ def check_http_authorization(acl, request, webdavpath, acl_name):
         realm = "django"
     response['WWW-Authenticate'] = 'Basic realm="%s"'%realm
     return response
+
+
+class WebdavViewMiddleware(object):
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        request.localpath = view_kwargs.get('localpath', None)
+        return None
