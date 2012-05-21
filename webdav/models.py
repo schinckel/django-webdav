@@ -14,7 +14,11 @@ class WebdavPath(models.Model):
     max_num_files = models.IntegerField()
     owner = models.ForeignKey(User)
 
-    def get_local_path(self, path):
+    _matched_path = None
+
+    def get_local_path(self, path = None):
+        if not path:
+            path = self._matched_path
         return os.path.normpath("%s/%s"%(self.local_path, path[len(self.url_path)-1:]))
 
     @classmethod
@@ -31,6 +35,7 @@ class WebdavPath(models.Model):
         if found:
             # return the longest matching wdp
             found.sort(lambda a, b: cmp(len(a.url_path), len(b.url_path)))
+            found[-1]._matched_path = path
             return found[-1]
         logger.debug("didn't find any defined paths for '%s'"%path)        
         return None

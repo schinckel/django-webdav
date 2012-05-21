@@ -6,12 +6,12 @@ WebDAV implementation.
 Part of the django-webdav project.
 """
 import logging
-
+import urllib
 import os
 import shutil
 from webdav.util import *
 from webdav.models import WebdavPath
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseNotAllowed
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, HttpResponseForbidden
 
 logger = logging.getLogger("webdav")
 
@@ -26,21 +26,20 @@ class OptionsHandler(MethodHandler):
 
 
 class PropfindHandler(MethodHandler):
+    """
+    Implements: PROPFIND method.
+    Status: completed.
+    """
 
     def handle(self, request, path):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
-        acl = DirectoryACL(found_path, lcpath)        
-        if not acl.perm_read(request.user):
-            response = check_http_authorization(request, found_path)
-            if response:
-                return response
-        if not acl.perm_read(request.user):
-            logger.info("user '%s' does not have %s permissions for '%s'"
-                        %(request.user.username, acl.ACL_READ, path))
-            return HttpResponseNotAllowed("405 Not Allowed")
+        acl = DirectoryACL(found_path, lcpath)
+        response = check_http_authorization(acl, request, found_path, "read")
+        if response:
+            return response
         elem = Elem.from_xml(request.body)
         if not elem:
             return HttpResponseBadRequest()
@@ -51,23 +50,25 @@ class PropfindHandler(MethodHandler):
                     find_props.append(child2.name)
         # Return response
         multistatus = Elem("multistatus", xmlns="DAV:")
-        if not os.path.isdir(lcpath):
-            return HttpResponseBadRequest("403 Bad Request")
+        if not is_dir(lcpath):
+            return HttpResponseBadRequest("400 Bad Request")
         try:
             iterfiles = [lcpath] + os.listdir(lcpath)
         except IOError, ioe:
             logger.warning("could not list directory '%s'; %s"%(lcpath, ioe))
-            return HttpResponseNotAllowed("405 Not Allowed")
+            return HttpResponseForbidden("403 Internal")
         for filename in iterfiles:
+            if filename == lcpath:
+                urn = urllib.quote(request.path.encode("utf-8"))
+                fn = lcpath
+            else:
+                urn = urllib.quote(os.path.normpath("%s/%s"%(request.path, filename)).encode("utf-8"))
+                fn = os.path.normpath("%s/%s/"%(lcpath, filename))
             if (filename == acl.ACL_FILENAME 
                 and not acl.perm_acl(request.user)):
                 continue
-            if filename == lcpath:
-                urn = os.path.normpath(request.path)
-                fn = lcpath
-            else:
-                urn = os.path.normpath("%s/%s"%(request.path, filename))
-                fn = os.path.normpath("%s/%s/"%(lcpath, filename))
+            if not is_file(fn) and not is_dir(fn):
+                continue
             response = multistatus.add_child(Elem("response"))
             response.add_child(Elem("href")).add_child(urn)
             propstat = response.add_child(Elem("propstat"))
@@ -86,22 +87,28 @@ class PropfindHandler(MethodHandler):
                     prop.add_child(Elem("getlastmodified")).add_child(mdate)
                 if "getcontentlength" in find_props:
                     prop.add_child(Elem("getcontentlength")).add_child("%d"%os.path.getsize(fn))
-                if os.path.isdir(fn):
+                if is_dir(fn):
                     prop.add_child(Elem("resourcetype")).add_child(Elem("collection"))          
                 else:
                     prop.add_child(Elem("resourcetype"))
                 propstat.add_child(Elem("status")).add_child("HTTP/1.1 200 OK")
             else:
-                propstat.add_child(Elem("status")).add_child("HTTP/1.1 405 Not allowed")
+                propstat.add_child(Elem("status")).add_child("HTTP/1.1 403 Internal")
 
         logger.debug("returned collection '%s' from '%s'"%(
             found_path.url_path, found_path.local_path))
-        xml = multistatus.get_xml()
+        xml = u"<?xml version=\"1.0\" encoding=\"utf-8\"?>" + multistatus.get_xml()
+        xmldata = xml.encode("utf-8")
         logger.info("propfind '%s'"%lcpath)
-        return HttpResponseMultistatus(xml, DAV = "1, 2, ordered-collections")
+        file("xml.log", "w").write(xmldata)
+        return HttpResponseMultistatus(xmldata, DAV = "1, 2, ordered-collections")
 
 
 class GetHandler(MethodHandler):
+    """
+    Implements: GET method.
+    Status: completed.
+    """
 
     def handle(self, request, path):
         found_path = WebdavPath.get_match_path_to_dir(path)
@@ -109,97 +116,87 @@ class GetHandler(MethodHandler):
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
         acl = DirectoryACL(found_path, lcpath)
-        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
-            and not acl.perm_acl(request.user)):
-            return HttpResponseNotFound()        
-        if not acl.perm_read(request.user):
-            response = check_http_authorization(request, found_path)
-            if response:
-                return response
-        if not acl.perm_read(request.user):
-            logger.info("user '%s' does not have %s permissions for '%s'"
-                        %(request.user.username, acl.ACL_READ, path))
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if not os.path.isfile(lcpath):
+        response = check_http_authorization(acl, request, found_path, "read")
+        if response:
+            return response
+        if (not is_file(lcpath) 
+            or (lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user))):
             return HttpResponseNotFound()        
         try:
             fsock = file(lcpath, "r")
         except IOError, ioe:
             logger.warning("could read file '%s' ('%s'); %s"%(
                     found_path.url_path, lcpath, ioe))
-            return HttpResponseNotAllowed("405 Not allowed")
+            return HttpResponseForbidden("403 Internal")
+        filename = os.path.basename(lcpath)
+        filesize = os.path.getsize(lcpath)
+        response = HttpResponse(fsock)
+        response['Content-Disposition'] = 'attachment; filename=' + filename.encode("utf-8")
+        logger.info("read file '%s' ('%s')"%(found_path.url_path, lcpath))
+        return response
+
+
+class HeadHandler(MethodHandler):
+    """
+    Implements: HEAD method.
+    Status: not complete. I'm not sure what da heck this is supposed to do.
+    """
+
+    def handle(self, request, path):
+        found_path = WebdavPath.get_match_path_to_dir(path)
+        if not found_path:
+            return HttpResponseNotFound()
+        lcpath = found_path.get_local_path(path)
+        acl = DirectoryACL(found_path, lcpath)
+        response = check_http_authorization(acl, request, found_path, "read")
+        if response:
+            return response
+        if (not is_file(lcpath) 
+            or (lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user))):
+            return HttpResponseNotFound()        
+        try:
+            fsock = file(lcpath, "r")
+        except IOError, ioe:
+            logger.warning("could read file '%s' ('%s'); %s"%(
+                    found_path.url_path, lcpath, ioe))
+            return HttpResponseForbidden("403 Internal")
         filename = os.path.basename(lcpath)
         filesize = os.path.getsize(lcpath)
         response = HttpResponse(fsock)
         response['Content-Disposition'] = 'attachment; filename=' + filename
         logger.info("read file '%s' ('%s')"%(found_path.url_path, lcpath))
         return response
-
-
-class HeadHandler(MethodHandler):
-
-    def handle(self, request, path):
-        found_path = WebdavPath.get_match_path_to_dir(path)
-        if not found_path:
-            return HttpResponseNotFound()
-        lcpath = found_path.get_local_path(path)
-        acl = DirectoryACL(found_path, lcpath)
-        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
-            and not acl.perm_acl(request.user)):
-            return HttpResponseNotFound()        
-        if not acl.perm_read(request.user):
-            response = check_http_authorization(request, found_path)
-            if response:
-                return response
-        if not acl.perm_read(request.user):
-            logger.info("user '%s' does not have %s permissions for '%s'"
-                        %(request.user.username, acl.ACL_READ, path))
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if not os.path.isfile(lcpath):
-            return HttpResponseNotFound()        
-        response = HttpResponse()
-        filename = os.path.basedir(lcpath)
-        response['Content-Disposition'] = 'attachment; filename=' + filename
-        logger.info("head file '%s' ('%s')"%(found_path.url_path, lcpath))
-        return response
     
 
 class PutHandler(MethodHandler):
+    """
+    Implements: PUT method.
+    Status: completed.
+    """
 
     def handle(self, request, path):
         found_path = WebdavPath.get_match_path_to_dir(path)
         if not found_path:
             return HttpResponseNotFound()
-        lcpath = found_path.get_local_path(path)
+        lcpath = found_path.get_local_path(path)        
         acl = DirectoryACL(found_path, lcpath)
-        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
-            and not acl.perm_acl(request.user)):
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if os.path.isdir(lcpath):
-            return HttpResponseBadRequest()
-        elif os.path.isfile(lcpath):
-            if not acl.perm_write(request.user):
-                response = check_http_authorization(request, found_path)
-                if response:
-                    return response
-            if not acl.perm_write(request.user):
-                logger.info("user '%s' does not have %s permissions for '%s'"
-                            %(request.user.username, acl.ACL_WRITE, path))
-                return HttpResponseNotAllowed("405 Not Allowed")
+        if is_file(lcpath):
+            response = check_http_authorization(acl, request, found_path, "write")
+            if response:
+                return response
         else:
-            if not acl.perm_new_file(request.user):
-                response = check_http_authorization(request, found_path)
-                if response:
-                    return response
-            if not acl.perm_new_file(request.user):
-                logger.info("user '%s' does not have %s permissions for '%s'"
-                            %(request.user.username, acl.ACL_NEW_FILE, path))
-                return HttpResponseNotAllowed("405 Not Allowed")
+            response = check_http_authorization(acl, request, found_path, "new_file")
+            if response:
+                return response
+        if os.path.islink(lcpath) or is_dir(lcpath):
+            logger.warning("trying to overwrite symbolic link or dir '%s'"%lcpath)
+            return HttpResponseForbidden("403 Put directory")
+        if lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user):
+            return HttpResponseForbidden("403 Permission")
         try:
             content_length = int(request.META.get("CONTENT_LENGTH"))
         except (ValueError, TypeError):
             content_length = 0
-
         max_quota = found_path.quota * WebdavPath.QUOTA_SIZE_MULT
         max_num_files = found_path.max_num_files
         if max_quota > 0:
@@ -207,21 +204,19 @@ class PutHandler(MethodHandler):
             if used_quota + content_length >= max_quota:
                 logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
                     found_path.url_path, lcpath, used_quota, max_quota))
-                return HttpResponseNotAllowed("405 Not Allowed")
+                return HttpResponseForbidden("403 Quota")
             if num_files + 1 >= max_num_files:
                 logger.info("num files exceeded for '%s' ('%s') %d/%d"%(
                     found_path.url_path, lcpath, num_files, max_num_files))
-                return HttpResponseNotAllowed("405 Not Allowed")
+                return HttpResponseForbidden("403 Num files")
         else:
             used_quota = 0
             num_files = 0
-
         try:
             fileout = file(lcpath, "w")
         except IOError, ioe:
             logger.warning("could write file '%s'; %s"%(lcpath, ioe))
-            return HttpResponseNotAllowed("405 Not Allowed")
-        
+            return HttpResponseForbidden("403 Internal")
         buf = request.read(1024)
         while len(buf) > 0:
             if max_quota > 0:
@@ -230,15 +225,19 @@ class PutHandler(MethodHandler):
                     fileout.close()
                     logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
                         found_path.url_path, lcpath, used_quota, max_quota))
-                    return HttpResponseNotAllowed("405 Not Allowed")
+                    return HttpResponseForbidden("403 Quota")
             fileout.write(buf)
             buf = request.read(1024)
         fileout.close()
         logger.info("wrote file '%s'"%lcpath)
-        return HttpResponse()        
+        return HttpResponseCreated()
 
 
 class DeleteHandler(MethodHandler):
+    """
+    Implements: DELETE method.
+    Status: completed.
+    """
 
     def handle(self, request, path):
         found_path = WebdavPath.get_match_path_to_dir(path)
@@ -246,27 +245,21 @@ class DeleteHandler(MethodHandler):
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
         acl = DirectoryACL(found_path, lcpath)
-        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
-            and not acl.perm_acl(request.user)):
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if not acl.perm_delete(request.user):
-            response = check_http_authorization(request, found_path)
-            if response:
-                return response
-        if not acl.perm_delete(request.user):
-            logger.info("user '%s' does not have %s permissions for '%s'"
-                        %(request.user.username, acl.ACL_DELETE, path))
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if not os.path.isfile(lcpath) and not os.path.isdir(lcpath):
+        response = check_http_authorization(acl, request, found_path, "delete")
+        if response:
+            return response
+        if lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user):
+            return HttpResponseForbidden("403 Permission")
+        if not is_file(lcpath) and not is_dir(lcpath):
             return HttpResponseNotFound()
-        if os.path.isdir(lcpath):
+        if is_dir(lcpath):
             try:
                 shutil.rmtree(lcpath)
                 logger.info("removed directory '%s'"%lcpath)
             except IOError, ioe:
                 logger.warning("could not remove directory '%s'; %s"%(lcpath, ioe))
                 return HttpResponseNotAllowed("405 Not Allowed")            
-        elif os.path.isfile(lcpath):
+        elif is_file(lcpath):
             try:
                 os.remove(lcpath)            
                 logger.info("removed file '%s'"%lcpath)
@@ -278,6 +271,10 @@ class DeleteHandler(MethodHandler):
     
 
 class MakedirHandler(MethodHandler):
+    """
+    Implements: MKCOL method.
+    Status: completed.
+    """
 
     def handle(self, request, path):
         found_path = WebdavPath.get_match_path_to_dir(path)
@@ -285,18 +282,12 @@ class MakedirHandler(MethodHandler):
             return HttpResponseNotFound()
         lcpath = found_path.get_local_path(path)
         acl = DirectoryACL(found_path, lcpath)
-        if (os.path.basename(lcpath) == acl.ACL_FILENAME 
-            and not acl.perm_acl(request.user)):
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if not acl.perm_new_file(request.user):
-            response = check_http_authorization(request, found_path)
-            if response:
-                return response
-        if not acl.perm_new_file(request.user):
-            logger.info("user '%s' does not have %s permissions for '%s'"
-                        %(request.user.username, acl.ACL_NEW_FILE, path))
-            return HttpResponseNotAllowed("405 Not Allowed")
-        if os.path.isdir(lcpath) or os.path.isfile(lcpath):
+        response = check_http_authorization(acl, request, found_path, "new_file")
+        if response:
+            return response
+        if lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user):
+            return HttpResponseForbidden("403 Permission")
+        if is_dir(lcpath) or is_file(lcpath):
             return HttpResponseNotAllowed("405 Not Allowed")
         try:
             os.mkdir(lcpath)
@@ -304,4 +295,22 @@ class MakedirHandler(MethodHandler):
             logger.warning("could create directory '%s'; %s"%(lcpath, ioe))
             return HttpResponseNotAllowed("405 Not Allowed")
         logger.info("created directory '%s'"%lcpath)
-        return HttpResponse()        
+        return HttpResponseCreated()
+
+
+class CopyHandler(MethodHandler):
+    """
+    Implements: COPY method.
+    Status: not completed.
+    """
+
+    def handle(self, request, path):
+        found_path = WebdavPath.get_match_path_to_dir(path)
+        if not found_path:
+            return HttpResponseNotFound()
+        lcpath = found_path.get_local_path(path)
+        response = check_http_authorization(acl, request, found_path, "new_file")
+        if response:
+            return response
+        if lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user):
+            return HttpResponseForbidden("403 Permission")
