@@ -322,7 +322,7 @@ class MakedirHandler(MethodHandler):
 class CopyHandler(MethodHandler):
     """
     Implements: COPY method.
-    Status: not completed.
+    Status: completed.
     """
 
     def handle(self, request):
@@ -392,9 +392,90 @@ class CopyHandler(MethodHandler):
             used_quota = 0
             num_files = 0
         try:
-            shutil.copyfile(lcpath, target_lcpath)
+            shutil.copy(lcpath, target_lcpath)
         except IOError, ioe:
             logger.warning("failed to copy '%s' to '%s'; %s"%(lcpath, target_lcpath, ioe))
             return HttpResponseNotAllowed("405 Not Allowed")
         logger.info("copied file '%s' to '%s'"%(lcpath, target_lcpath))
+        return HttpResponse('', None, 201)
+
+
+class MoveHandler(MethodHandler):
+    """
+    Implements: MOVE method.
+    Status: completed.
+    """
+
+    def handle(self, request):
+        found_path = WebdavPath.get_match_path_to_dir(request.localpath)
+        if not found_path:
+            return HttpResponseNotFound()
+        lcpath = found_path.get_local_path(request.localpath)        
+        if not lcpath:
+            logger.warning("invalid file path '%s'"%path)
+            return HttpResponseForbidden("403 Internal")
+
+        target_uri = request.META.get("HTTP_DESTINATION", "")
+        target_parsed = urlparse.urlparse(target_uri)
+        try:
+            match = resolve(target_parsed.path)
+        except Http404:
+            return HttpResponseBadRequest()
+        target_localpath = match.kwargs.get("localpath")
+        if target_localpath.endswith("/"):
+            target_localpath += os.path.basename(lcpath)
+        target_found_path = WebdavPath.get_match_path_to_dir(target_localpath)
+        if not target_found_path:
+            logger.warning("no paths defined for '%s'"%target_localpath)
+            return HttpResponseBadRequest()
+        target_lcpath = target_found_path.get_local_path(target_localpath)
+
+        acl = DirectoryACL(found_path, lcpath)
+        response = check_http_authorization(acl, request, found_path, "read")
+        if response:
+            return response
+        target_acl = DirectoryACL(target_found_path, target_lcpath)
+        perm = is_file(target_lcpath) and "write" or "new_file"
+        target_response = check_http_authorization(acl, request, target_found_path, perm)
+        if target_response:
+            return target_response
+
+        if lcpath.endswith(acl.ACL_FILENAME) and not acl.perm_acl(request.user):
+            return HttpResponseForbidden("403 Permission")
+        if target_lcpath.endswith(target_acl.ACL_FILENAME) and not target_acl.perm_acl(request.user):
+            return HttpResponseForbidden("403 Permission")
+
+        if os.path.islink(lcpath) or is_dir(lcpath):
+            logger.warning("trying to overwrite symbolic link or dir '%s'"%lcpath)
+
+        try:
+            content_length = int(request.META.get("CONTENT_LENGTH"))
+        except (ValueError, TypeError):
+            content_length = 0
+        max_quota = found_path.quota * WebdavPath.QUOTA_SIZE_MULT
+        max_num_files = found_path.max_num_files
+        if max_quota > 0 or max_num_files > 0:
+            used_quota, num_files = get_used_quota(found_path.local_path)
+            if is_file(target_lcpath):
+                if max_quota > 0:
+                    used_quota -= os.path.getsize(target_lcpath)
+                if max_num_files > 0:
+                    num_files -= 1
+            if max_quota > 0 and used_quota + content_length >= max_quota:
+                logger.info("quota exceeded for '%s' ('%s') %d/%d"%(
+                    found_path.url_path, lcpath, used_quota, max_quota))
+                return HttpResponseForbidden("403 Quota")
+            if max_num_files > 0 and num_files + 1 >= max_num_files:
+                logger.info("num files exceeded for '%s' ('%s') %d/%d"%(
+                    found_path.url_path, lcpath, num_files, max_num_files))
+                return HttpResponseForbidden("403 Num files")
+        else:
+            used_quota = 0
+            num_files = 0
+        try:
+            shutil.move(lcpath, target_lcpath)
+        except IOError, ioe:
+            logger.warning("failed to copy '%s' to '%s'; %s"%(lcpath, target_lcpath, ioe))
+            return HttpResponseNotAllowed("405 Not Allowed")
+        logger.info("moved file '%s' to '%s'"%(lcpath, target_lcpath))
         return HttpResponse('', None, 201)

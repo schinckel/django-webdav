@@ -3,19 +3,20 @@ from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseNotFou
 from webdav import util
 from webdav_handlers import *
 
-handlers = util.MethodHandlers()
-handlers.add_handler("OPTIONS", OptionsHandler())
-handlers.add_handler("PROPFIND", PropfindHandler())
-handlers.add_handler("GET", GetHandler())
-handlers.add_handler("HEAD", HeadHandler())
-handlers.add_handler("PUT", PutHandler())
-handlers.add_handler("DELETE", DeleteHandler())
-handlers.add_handler("MKCOL", MakedirHandler())
-handlers.add_handler("COPY", CopyHandler())
+webdav_handlers = util.MethodHandlers()
+webdav_handlers.add_handler("OPTIONS", OptionsHandler())
+webdav_handlers.add_handler("PROPFIND", PropfindHandler())
+webdav_handlers.add_handler("GET", GetHandler())
+webdav_handlers.add_handler("HEAD", HeadHandler())
+webdav_handlers.add_handler("PUT", PutHandler())
+webdav_handlers.add_handler("DELETE", DeleteHandler())
+webdav_handlers.add_handler("MKCOL", MakedirHandler())
+webdav_handlers.add_handler("COPY", CopyHandler())
+webdav_handlers.add_handler("MOVE", MoveHandler())
 
 @csrf_exempt
 def default(request, **kwargs):
     path = kwargs.get("localpath")
     if not hasattr(request, "localpath"):
         return HttpResponseServerError("No 'localpath' attribute found, add webdav.util.WebdavViewMiddleware to your middleware classes")
-    return handlers.handle(request)
+    return webdav_handlers.handle(request)
